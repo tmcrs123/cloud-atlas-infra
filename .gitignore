@@ -416,3 +416,11 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# terraform
+.terraform
+.terraform.lock.hcl
+terraform.tfvars
+.terraform.lock.hcl
+terraform.tfstate.backup
+terraform.tfstate
