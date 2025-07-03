@@ -22,10 +22,6 @@ provider "azurerm" {
   }
 }
 
-locals {
-  process_image_lambda_arn = "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:cloud-atlas-${local.environment}"
-}
-
 resource "aws_api_gateway_rest_api" "api_gw" {
   name = "cloud-atlas-${local.environment}-api"
   endpoint_configuration {
@@ -47,6 +43,66 @@ resource "aws_api_gateway_resource" "proxy" {
   path_part   = "{proxy+}"
 }
 
+resource "aws_api_gateway_method" "proxy_options" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gw.id
+  resource_id   = aws_api_gateway_resource.proxy.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+  request_parameters = {
+    "method.request.header.Origin"                         = false
+    "method.request.header.Access-Control-Request-Method"  = false
+    "method.request.header.Access-Control-Request-Headers" = false
+  }
+}
+
+resource "aws_api_gateway_integration" "proxy_options_integration" {
+  depends_on = [aws_api_gateway_method.proxy_options]
+
+  rest_api_id             = aws_api_gateway_rest_api.api_gw.id
+  resource_id             = aws_api_gateway_resource.proxy.id
+  http_method             = aws_api_gateway_method.proxy_options.http_method
+  type                    = "MOCK"
+  integration_http_method = "OPTIONS"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+  passthrough_behavior = "WHEN_NO_MATCH"
+}
+
+resource "aws_api_gateway_integration_response" "proxy_options_response" {
+  depends_on = [aws_api_gateway_integration.proxy_options_integration]
+
+  rest_api_id = aws_api_gateway_rest_api.api_gw.id
+  resource_id = aws_api_gateway_resource.proxy.id
+  http_method = aws_api_gateway_method.proxy_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS,PATCH'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+  }
+}
+
+resource "aws_api_gateway_method_response" "proxy_options_method_response" {
+  depends_on = [aws_api_gateway_integration_response.proxy_options_response]
+
+  rest_api_id = aws_api_gateway_rest_api.api_gw.id
+  resource_id = aws_api_gateway_resource.proxy.id
+  http_method = aws_api_gateway_method.proxy_options.http_method
+  status_code = "200"
+
+  response_models = {
+    "application/json" = "Empty"
+  }
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Headers" = true
+  }
+}
+
 resource "aws_api_gateway_method" "proxy_method" {
   rest_api_id   = aws_api_gateway_rest_api.api_gw.id
   resource_id   = aws_api_gateway_resource.proxy.id
@@ -57,6 +113,34 @@ resource "aws_api_gateway_method" "proxy_method" {
     "method.request.path.proxy" = true
   }
   depends_on = [aws_api_gateway_authorizer.cognito_authorizer]
+}
+
+resource "aws_api_gateway_resource" "healthcheck" {
+  rest_api_id = aws_api_gateway_rest_api.api_gw.id
+  parent_id   = aws_api_gateway_rest_api.api_gw.root_resource_id
+  path_part   = "api"
+}
+
+resource "aws_api_gateway_resource" "healthcheck_sub" {
+  rest_api_id = aws_api_gateway_rest_api.api_gw.id
+  parent_id   = aws_api_gateway_resource.healthcheck.id
+  path_part   = "healthcheck"
+}
+
+resource "aws_api_gateway_method" "healthcheck_get" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gw.id
+  resource_id   = aws_api_gateway_resource.healthcheck_sub.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "healthcheck_lambda" {
+  rest_api_id             = aws_api_gateway_rest_api.api_gw.id
+  resource_id             = aws_api_gateway_resource.healthcheck_sub.id
+  http_method             = aws_api_gateway_method.healthcheck_get.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "arn:aws:apigateway:${var.aws_region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:cloud-atlas-${local.environment}/invocations"
 }
 
 resource "aws_api_gateway_authorizer" "cognito_authorizer" {
@@ -73,7 +157,7 @@ resource "aws_api_gateway_integration" "lambda_proxy" {
   http_method             = aws_api_gateway_method.proxy_method.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "arn:aws:apigateway:${var.aws_region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:cloud-atlas-${var.aws_region}/invocations"
+  uri                     = "arn:aws:apigateway:${var.aws_region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:cloud-atlas-${local.environment}/invocations"
   request_parameters = {
     "integration.request.path.proxy" = "method.request.path.proxy"
   }
@@ -542,9 +626,9 @@ resource "aws_iam_policy" "codebuild_ssm_policy" {
           aws_ssm_parameter.google_maps_api_key.arn,
           aws_ssm_parameter.id_token_expiration_in_miliseconds.arn,
           aws_ssm_parameter.logout_uri.arn,
-          aws_ssm_parameter.maps_limit.arn,
+          aws_ssm_parameter.atlas_limit.arn,
           aws_ssm_parameter.markers_limit.arn,
-          aws_ssm_parameter.images_limit.arn
+          aws_ssm_parameter.photos_limit.arn
         ]
       }
     ]
@@ -732,7 +816,7 @@ resource "aws_codebuild_project" "ui_build" {
 
     environment_variable {
       name  = "mapsLimit"
-      value = aws_ssm_parameter.maps_limit.value
+      value = aws_ssm_parameter.atlas_limit.value
       type  = "PARAMETER_STORE"
     }
 
@@ -744,7 +828,7 @@ resource "aws_codebuild_project" "ui_build" {
 
     environment_variable {
       name  = "imagesLimit"
-      value = aws_ssm_parameter.images_limit.value
+      value = aws_ssm_parameter.photos_limit.value
       type  = "PARAMETER_STORE"
     }
   }
@@ -901,7 +985,7 @@ resource "azurerm_mssql_firewall_rule" "cloud-atlas-sql-firewall" {
   name             = "allowAll"
   server_id        = azurerm_mssql_server.cloud-atlas-sql-server.id
   start_ip_address = "0.0.0.0"
-  end_ip_address   = "0.0.0.0"
+  end_ip_address   = "255.255.255.255"
 }
 
 resource "azurerm_mssql_database" "cloud-atlas-sql-database" {
