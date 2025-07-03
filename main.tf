@@ -13,7 +13,7 @@ terraform {
 }
 
 provider "azurerm" {
-  subscription_id = "164939af-9b80-4554-b1af-1372ab04830e"
+  subscription_id = var.azure_subscription_id
 
   features {
     resource_group {
@@ -23,11 +23,11 @@ provider "azurerm" {
 }
 
 locals {
-  process_image_lambda_arn = "arn:aws:lambda:${var.aws_region}:891376964515:function:cloud-atlas-${var.environment}"
+  process_image_lambda_arn = "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:cloud-atlas-${local.environment}"
 }
 
 resource "aws_api_gateway_rest_api" "api_gw" {
-  name = "cloud-atlas-${var.environment}-api"
+  name = "cloud-atlas-${local.environment}-api"
   endpoint_configuration {
     types = ["REGIONAL"]
   }
@@ -36,7 +36,7 @@ resource "aws_api_gateway_rest_api" "api_gw" {
 resource "aws_lambda_permission" "api_gw" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
-  function_name = "arn:aws:lambda:us-east-1:891376964515:function:cloud-atlas"
+  function_name = "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:cloud-atlas-${local.environment}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.api_gw.execution_arn}/*/*"
 }
@@ -60,7 +60,7 @@ resource "aws_api_gateway_method" "proxy_method" {
 }
 
 resource "aws_api_gateway_authorizer" "cognito_authorizer" {
-  name            = "cloud-atlas-${var.environment}-cognito-authorizer"
+  name            = "cloud-atlas-${local.environment}-cognito-authorizer"
   rest_api_id     = aws_api_gateway_rest_api.api_gw.id
   type            = "COGNITO_USER_POOLS"
   provider_arns   = [aws_cognito_user_pool.user_pool.arn]
@@ -73,7 +73,7 @@ resource "aws_api_gateway_integration" "lambda_proxy" {
   http_method             = aws_api_gateway_method.proxy_method.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:891376964515:function:cloud-atlas/invocations"
+  uri                     = "arn:aws:apigateway:${var.aws_region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:cloud-atlas-${var.aws_region}/invocations"
   request_parameters = {
     "integration.request.path.proxy" = "method.request.path.proxy"
   }
@@ -89,12 +89,12 @@ resource "aws_api_gateway_deployment" "api_gw_deployment" {
 resource "aws_api_gateway_stage" "api_gw_stage" {
   deployment_id = aws_api_gateway_deployment.api_gw_deployment.id
   rest_api_id   = aws_api_gateway_rest_api.api_gw.id
-  stage_name    = var.environment
+  stage_name    = local.environment
 }
 
 # Cognito User Pool
 resource "aws_cognito_user_pool" "user_pool" {
-  name = "cloud-atlas-${var.environment}-user-pool"
+  name = "cloud-atlas-${local.environment}-user-pool"
 
   auto_verified_attributes = ["email"]
 
@@ -105,12 +105,6 @@ resource "aws_cognito_user_pool" "user_pool" {
     require_numbers   = true
     require_symbols   = true
   }
-
-  # schema {
-  #     name     = "email"
-  #     required = true
-  #     mutable  = false
-  # }
 
   admin_create_user_config {
     allow_admin_create_user_only = false
@@ -133,7 +127,7 @@ resource "aws_cognito_user_pool" "user_pool" {
 
 # Cognito User Pool Client
 resource "aws_cognito_user_pool_client" "user_pool_client" {
-  name         = "cloud-atlas-${var.environment}-user-pool-client"
+  name         = "cloud-atlas-${local.environment}-user-pool-client"
   user_pool_id = aws_cognito_user_pool.user_pool.id
 
   supported_identity_providers  = ["COGNITO"]
@@ -151,22 +145,22 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
   allowed_oauth_scopes                 = ["openid"]
 
   callback_urls = [
-    "http://localhost:4200/redirect"
+    var.callback_url
   ]
   logout_urls = [
-    "http://localhost:4200"
+    var.logout_url
   ]
 }
 
 # Cognito User Pool Domain
 resource "aws_cognito_user_pool_domain" "user_pool_domain" {
-  domain       = "cloud-atlas-${var.environment}"
+  domain       = "cloud-atlas-${local.environment}"
   user_pool_id = aws_cognito_user_pool.user_pool.id
 }
 
 # S3
 resource "aws_s3_bucket" "ui_bucket" {
-  bucket        = "cloud-atlas-${var.environment}-ui"
+  bucket        = "cloud-atlas-${local.environment}-ui"
   force_destroy = true
 }
 
@@ -186,7 +180,7 @@ resource "aws_s3_bucket_policy" "ui_bucket_policy" {
         Resource = "${aws_s3_bucket.ui_bucket.arn}/*"
         Condition = {
           StringEquals = {
-            "AWS:SourceArn" = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/*"
+            "AWS:SourceArn" = "arn:aws:cloudfront::${var.aws_account_id}:distribution/*"
           }
         }
       }
@@ -195,12 +189,12 @@ resource "aws_s3_bucket_policy" "ui_bucket_policy" {
 }
 
 resource "aws_s3_bucket" "lambdas_bucket" {
-  bucket        = "cloud-atlas-${var.environment}-lambdas"
+  bucket        = "cloud-atlas-${local.environment}-lambdas"
   force_destroy = true
 }
 
 resource "aws_s3_bucket" "dump_bucket" {
-  bucket        = "cloud-atlas-${var.environment}-dump"
+  bucket        = "cloud-atlas-${local.environment}-dump"
   force_destroy = true
 }
 
@@ -234,7 +228,7 @@ resource "aws_s3_bucket_cors_configuration" "dump_bucket_cors" {
 }
 
 resource "aws_s3_bucket" "opt_bucket" {
-  bucket        = "cloud-atlas-${var.environment}-opt"
+  bucket        = "cloud-atlas-${local.environment}-opt"
   force_destroy = true
 }
 
@@ -250,25 +244,6 @@ resource "aws_s3_bucket_cors_configuration" "opt_bucket_cors" {
   }
 }
 
-# Lambda
-# resource "aws_lambda_function" "lambda-api" {
-#   function_name = "cloud-atlas-${var.environment}-api"
-#   role          = aws_iam_role.lambda-api-role.arn
-#   handler       = "index.handler"
-#   s3_bucket     = aws_s3_bucket.lambdas_bucket.bucket
-#   s3_key        = "change-me"
-#   runtime       = "nodejs20.x"
-#   memory_size   = 256
-#   timeout       = 30
-
-#   environment {
-#     variables = {
-#       DUMP_BUCKET_NAME = aws_s3_bucket.dump_bucket.bucket,
-#       OPT_BUCKET_NAME  = aws_s3_bucket.opt_bucket.bucket
-#     }
-#   }
-# }
-
 data "archive_file" "lambda_package" {
   type        = "zip"
   source_dir  = "${path.module}/../cloud-atlas-lambda/process-image/dist"
@@ -276,7 +251,7 @@ data "archive_file" "lambda_package" {
 }
 
 resource "aws_lambda_function" "process-image-lambda" {
-  function_name    = "cloud-atlas-${var.environment}-process-image"
+  function_name    = "cloud-atlas-${local.environment}-process-image"
   handler          = "index.handler"
   runtime          = "nodejs22.x"
   filename         = data.archive_file.lambda_package.output_path
@@ -292,7 +267,7 @@ resource "aws_lambda_function" "process-image-lambda" {
 }
 
 resource "aws_iam_role" "lambda-api-role" {
-  name = "cloud-atlas-${var.environment}-lambda-api-role"
+  name = "cloud-atlas-${local.environment}-lambda-api-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -306,7 +281,7 @@ resource "aws_iam_role" "lambda-api-role" {
 }
 
 resource "aws_iam_role" "lambda-process-image-role" {
-  name = "cloud-atlas-${var.environment}-lambda-process-image-role"
+  name = "cloud-atlas-${local.environment}-lambda-process-image-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -320,7 +295,7 @@ resource "aws_iam_role" "lambda-process-image-role" {
 }
 
 resource "aws_iam_policy" "lambda-api_delete_policy" {
-  name        = "cloud-atlas-${var.environment}-lambda-api-s3-delete-policy"
+  name        = "cloud-atlas-${local.environment}-lambda-api-s3-delete-policy"
   description = "Allow Cloud Atlas lambda API to delete objects from optimized S3 bucket"
   policy = jsonencode({
     Version = "2012-10-17"
@@ -348,7 +323,7 @@ resource "aws_iam_policy" "lambda-api_delete_policy" {
 }
 
 resource "aws_iam_policy" "lambda-process-image-policy" {
-  name        = "cloud-atlas-${var.environment}-lambda-process-image-policy"
+  name        = "cloud-atlas-${local.environment}-lambda-process-image-policy"
   description = "Allow Cloud Atlas process image lambda to read and delete from s3 buckets"
   policy = jsonencode({
     Version = "2012-10-17"
@@ -398,8 +373,8 @@ resource "aws_iam_role_policy_attachment" "lambda-process-image-policy_attach" {
 
 #SNS topic
 resource "aws_sns_topic" "bucket_events_topic" {
-  name         = "cloud-atlas-${var.environment}-bucket-events-topic"
-  display_name = "cloud-atlas-${var.environment}-bucket-events-topic"
+  name         = "cloud-atlas-${local.environment}-bucket-events-topic"
+  display_name = "cloud-atlas-${local.environment}-bucket-events-topic"
 }
 
 data "aws_caller_identity" "current" {}
@@ -407,12 +382,12 @@ data "aws_caller_identity" "current" {}
 resource "aws_sns_topic_subscription" "bucket_events_topic_subscription" {
   topic_arn = aws_sns_topic.bucket_events_topic.arn
   protocol  = "lambda"
-  endpoint  = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:cloud-atlas-${var.environment}-process-image"
+  endpoint  = "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:cloud-atlas-${local.environment}-process-image"
 }
 
 # Cloudfront
 resource "aws_cloudfront_origin_access_control" "ui_oac" {
-  name                              = "cloud-atlas-${var.environment}-ui-oac"
+  name                              = "cloud-atlas-${local.environment}-ui-oac"
   description                       = "OAC for UI S3 bucket"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
@@ -426,14 +401,14 @@ resource "aws_cloudfront_distribution" "ui_distribution" {
 
   origin {
     domain_name              = aws_s3_bucket.ui_bucket.bucket_regional_domain_name
-    origin_id                = "cloud-atlas-${var.environment}-ui"
+    origin_id                = "cloud-atlas-${local.environment}-ui"
     origin_access_control_id = aws_cloudfront_origin_access_control.ui_oac.id
   }
 
   default_cache_behavior {
     allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD", "OPTIONS"]
-    target_origin_id         = "cloud-atlas-${var.environment}-ui"
+    target_origin_id         = "cloud-atlas-${local.environment}-ui"
     viewer_protocol_policy   = "redirect-to-https"
     cache_policy_id          = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized
     origin_request_policy_id = "88a5eaf4-2fd4-4709-b370-b4c650ea3fcf" # CORS-S3Origin
@@ -454,7 +429,7 @@ resource "aws_cloudfront_distribution" "ui_distribution" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = "arn:aws:acm:us-east-1:891376964515:certificate/e0f5ed31-2ed9-41a3-8701-7be09cb4fa18"
+    acm_certificate_arn      = "arn:aws:acm:${var.aws_region}:${var.aws_account_id}:certificate/e0f5ed31-2ed9-41a3-8701-7be09cb4fa18"
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
@@ -467,7 +442,7 @@ resource "aws_cloudfront_distribution" "ui_distribution" {
 }
 
 resource "aws_cloudfront_origin_access_control" "opt_oac" {
-  name                              = "cloud-atlas-${var.environment}-opt-oac"
+  name                              = "cloud-atlas-${local.environment}-opt-oac"
   description                       = "OAC for Optimized S3 bucket"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
@@ -479,14 +454,14 @@ resource "aws_cloudfront_distribution" "opt_distribution" {
 
   origin {
     domain_name              = aws_s3_bucket.opt_bucket.bucket_regional_domain_name
-    origin_id                = "cloud-atlas-${var.environment}-opt"
+    origin_id                = "cloud-atlas-${local.environment}-opt"
     origin_access_control_id = aws_cloudfront_origin_access_control.opt_oac.id
   }
 
   default_cache_behavior {
     allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD", "OPTIONS"]
-    target_origin_id         = "cloud-atlas-${var.environment}-opt"
+    target_origin_id         = "cloud-atlas-${local.environment}-opt"
     viewer_protocol_policy   = "redirect-to-https"
     cache_policy_id          = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized
     origin_request_policy_id = "88a5eaf4-2fd4-4709-b370-b4c650ea3fcf" # CORS-S3Origin
@@ -512,7 +487,7 @@ resource "aws_cloudfront_distribution" "opt_distribution" {
     }
   }
   viewer_certificate {
-    acm_certificate_arn      = "arn:aws:acm:us-east-1:891376964515:certificate/e0f5ed31-2ed9-41a3-8701-7be09cb4fa18"
+    acm_certificate_arn      = "arn:aws:acm:${var.aws_region}:${var.aws_account_id}:certificate/e0f5ed31-2ed9-41a3-8701-7be09cb4fa18"
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
@@ -520,7 +495,7 @@ resource "aws_cloudfront_distribution" "opt_distribution" {
 
 ## UI Code Build
 resource "aws_iam_policy" "codebuild_logs_policy" {
-  name        = "cloud-atlas-${var.environment}-codebuild-logs-policy"
+  name        = "cloud-atlas-${local.environment}-codebuild-logs-policy"
   description = "Allow CodeBuild to write logs"
   policy = jsonencode({
     Version = "2012-10-17"
@@ -540,7 +515,7 @@ resource "aws_iam_policy" "codebuild_logs_policy" {
 }
 
 resource "aws_iam_policy" "codebuild_ssm_policy" {
-  name        = "cloud-atlas-${var.environment}-codebuild-ssm-policy"
+  name        = "cloud-atlas-${local.environment}-codebuild-ssm-policy"
   description = "Allow CodeBuild to get SSM parameters"
   policy = jsonencode({
     Version = "2012-10-17"
@@ -577,7 +552,7 @@ resource "aws_iam_policy" "codebuild_ssm_policy" {
 }
 
 resource "aws_iam_policy" "codebuild_s3_policy" {
-  name        = "cloud-atlas-${var.environment}-codebuild-s3-policy"
+  name        = "cloud-atlas-${local.environment}-codebuild-s3-policy"
   description = "Allow CodeBuild to access UI S3 bucket"
   policy = jsonencode({
     Version = "2012-10-17"
@@ -600,7 +575,7 @@ resource "aws_iam_policy" "codebuild_s3_policy" {
 }
 
 resource "aws_iam_policy" "codebuild_codecommit_policy" {
-  name        = "cloud-atlas-${var.environment}-codebuild-codecommit-policy"
+  name        = "cloud-atlas-${local.environment}-codebuild-codecommit-policy"
   description = "Allow CodeBuild to access CodeCommit repository"
   policy = jsonencode({
     Version = "2012-10-17"
@@ -614,7 +589,7 @@ resource "aws_iam_policy" "codebuild_codecommit_policy" {
           "codecommit:GetCommit",
           "codecommit:GetRepository"
         ]
-        Resource = "arn:aws:codecommit:${var.aws_region}:${data.aws_caller_identity.current.account_id}:cloud-atlas-ui"
+        Resource = "arn:aws:codecommit:${var.aws_region}:${var.aws_account_id}:cloud-atlas-ui"
       }
     ]
   })
@@ -661,7 +636,7 @@ resource "aws_codebuild_project" "ui_build" {
 
     environment_variable {
       name  = "environmentName"
-      value = var.environment
+      value = local.environment
       type  = "PLAINTEXT"
     }
 
@@ -776,7 +751,7 @@ resource "aws_codebuild_project" "ui_build" {
 }
 
 resource "aws_iam_role" "codebuild_service_role" {
-  name = "cloud-atlas-${var.environment}-code-build-service-role"
+  name = "cloud-atlas-${local.environment}-code-build-service-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -788,7 +763,7 @@ resource "aws_iam_role" "codebuild_service_role" {
         Action = "sts:AssumeRole"
         Condition = {
           StringEquals = {
-            "aws:SourceArn" = "arn:aws:codebuild:${var.aws_region}:${data.aws_caller_identity.current.account_id}:project/cloud-atlas-ui-build"
+            "aws:SourceArn" = "arn:aws:codebuild:${var.aws_region}:${var.aws_account_id}:project/cloud-atlas-ui-build"
           }
         }
       }
@@ -799,122 +774,122 @@ resource "aws_iam_role" "codebuild_service_role" {
 # SSM Parameters
 
 resource "aws_ssm_parameter" "app_name" {
-  name  = "/cloud-atlas/${var.environment}/app-name-parameter"
+  name  = "/cloud-atlas/${local.environment}/app-name-parameter"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = local.environment
 }
 
 resource "aws_ssm_parameter" "api_endpoint" {
-  name  = "/cloud-atlas/${var.environment}/api_endpoint"
+  name  = "/cloud-atlas/${local.environment}/api_endpoint"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = aws_api_gateway_stage.api_gw_stage.invoke_url
 }
 
 resource "aws_ssm_parameter" "authority" {
-  name  = "/cloud-atlas/${var.environment}/authority"
+  name  = "/cloud-atlas/${local.environment}/authority"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = "https://cloud-atlas-${local.environment}.auth.${var.aws_region}.amazoncognito.com"
 }
 
 resource "aws_ssm_parameter" "auth_well_known_endpoint_url" {
-  name  = "/cloud-atlas/${var.environment}/auth_well_known_endpoint_url"
+  name  = "/cloud-atlas/${local.environment}/auth_well_known_endpoint_url"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = "https://cloud-atlas-${local.environment}.auth.${var.aws_region}.amazoncognito.com/.well-known/openid-configuration"
 }
 
 resource "aws_ssm_parameter" "redirect_url" {
-  name  = "/cloud-atlas/${var.environment}/redirect_url"
+  name  = "/cloud-atlas/${local.environment}/redirect_url"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = var.callback_url
 }
 
 resource "aws_ssm_parameter" "post_logout_redirect_uri" {
-  name  = "/cloud-atlas/${var.environment}/post_logout_redirect_uri"
+  name  = "/cloud-atlas/${local.environment}/post_logout_redirect_uri"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = var.callback_url
 }
 
 resource "aws_ssm_parameter" "clientid" {
-  name  = "/cloud-atlas/${var.environment}/clientid"
+  name  = "/cloud-atlas/${local.environment}/clientid"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = aws_cognito_user_pool_client.user_pool_client.id
 }
 
 resource "aws_ssm_parameter" "renew_time_before_token_expires" {
-  name  = "/cloud-atlas/${var.environment}/renew_time_before_token_expires"
+  name  = "/cloud-atlas/${local.environment}/renew_time_before_token_expires"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = var.token_renew_time
 }
 
 resource "aws_ssm_parameter" "region" {
-  name  = "/cloud-atlas/${var.environment}/region"
+  name  = "/cloud-atlas/${local.environment}/region"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = var.aws_region
 }
 
 resource "aws_ssm_parameter" "user_pool_id" {
-  name  = "/cloud-atlas/${var.environment}/user_pool_id"
+  name  = "/cloud-atlas/${local.environment}/user_pool_id"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = aws_cognito_user_pool.user_pool.id
 }
 
 resource "aws_ssm_parameter" "max_image_file_size_in_bytes" {
-  name  = "/cloud-atlas/${var.environment}/max_image_file_size_in_bytes"
+  name  = "/cloud-atlas/${local.environment}/max_image_file_size_in_bytes"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = var.max_file_bytes
 }
 
 resource "aws_ssm_parameter" "google_map_id" {
-  name  = "/cloud-atlas/${var.environment}/google_map_id"
+  name  = "/cloud-atlas/${local.environment}/google_map_id"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = var.google_map_id
 }
 
 resource "aws_ssm_parameter" "google_maps_api_key" {
-  name  = "/cloud-atlas/${var.environment}/google_maps_api_key"
+  name  = "/cloud-atlas/${local.environment}/google_maps_api_key"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = var.google_map_key
 }
 
 resource "aws_ssm_parameter" "id_token_expiration_in_miliseconds" {
-  name  = "/cloud-atlas/${var.environment}/id_token_expiration_in_miliseconds"
+  name  = "/cloud-atlas/${local.environment}/id_token_expiration_in_miliseconds"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = var.token_expiration_time
 }
 
 resource "aws_ssm_parameter" "logout_uri" {
-  name  = "/cloud-atlas/${var.environment}/logout_uri"
+  name  = "/cloud-atlas/${local.environment}/logout_uri"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = var.logout_url
 }
 
-resource "aws_ssm_parameter" "maps_limit" {
-  name  = "/cloud-atlas/${var.environment}/maps_limit"
+resource "aws_ssm_parameter" "atlas_limit" {
+  name  = "/cloud-atlas/${local.environment}/atlas_limit"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = var.atlas_limit
 }
 
 resource "aws_ssm_parameter" "markers_limit" {
-  name  = "/cloud-atlas/${var.environment}/markers_limit"
+  name  = "/cloud-atlas/${local.environment}/markers_limit"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = var.markers_limit
 }
 
-resource "aws_ssm_parameter" "images_limit" {
-  name  = "/cloud-atlas/${var.environment}/images_limit"
+resource "aws_ssm_parameter" "photos_limit" {
+  name  = "/cloud-atlas/${local.environment}/photos_limit"
   type  = "String"
-  value = "cloud-atlas-${var.environment}"
+  value = var.photos_limit
 }
 
 # Azure
 resource "azurerm_resource_group" "cloud-atlas-resource-group" {
-  name     = "cloud-atlas-${var.environment}-resource-group"
+  name     = "cloud-atlas-${local.environment}-resource-group"
   location = "UK South"
 }
 
 # sql db
 resource "azurerm_mssql_server" "cloud-atlas-sql-server" {
-  name                         = "cloud-atlas-${var.environment}-sql-server"
+  name                         = "cloud-atlas-${local.environment}-sql-server"
   resource_group_name          = azurerm_resource_group.cloud-atlas-resource-group.name
   location                     = azurerm_resource_group.cloud-atlas-resource-group.location
   version                      = "12.0"
@@ -930,7 +905,7 @@ resource "azurerm_mssql_firewall_rule" "cloud-atlas-sql-firewall" {
 }
 
 resource "azurerm_mssql_database" "cloud-atlas-sql-database" {
-  name                        = "cloud-atlas-${var.environment}-sql-database"
+  name                        = "cloud-atlas-${local.environment}-sql-database"
   server_id                   = azurerm_mssql_server.cloud-atlas-sql-server.id
   sku_name                    = "GP_S_Gen5_1" # General Purpose, Serverless Gen5, 1 vCore max
   max_size_gb                 = 1
@@ -941,7 +916,7 @@ resource "azurerm_mssql_database" "cloud-atlas-sql-database" {
 
 # cosmosdb
 resource "azurerm_cosmosdb_account" "cloud-atlas-cosmosdb" {
-  name                = "cloud-atlas-${var.environment}-cosmosdb"
+  name                = "cloud-atlas-${local.environment}-cosmosdb"
   location            = azurerm_resource_group.cloud-atlas-resource-group.location
   resource_group_name = azurerm_resource_group.cloud-atlas-resource-group.name
   offer_type          = "Standard"
@@ -966,13 +941,13 @@ resource "azurerm_cosmosdb_account" "cloud-atlas-cosmosdb" {
 }
 
 resource "azurerm_cosmosdb_sql_database" "cloud-atlas-cosmosdb-db" {
-  name                = "cloud-atlas-${var.environment}-db"
+  name                = "cloud-atlas-${local.environment}-db"
   resource_group_name = azurerm_resource_group.cloud-atlas-resource-group.name
   account_name        = azurerm_cosmosdb_account.cloud-atlas-cosmosdb.name
 }
 
 resource "azurerm_cosmosdb_sql_container" "cloud-atlas-cosmosdb-container" {
-  name                = "cloud-atlas-${var.environment}-container"
+  name                = "cloud-atlas-${local.environment}-container"
   resource_group_name = azurerm_resource_group.cloud-atlas-resource-group.name
   account_name        = azurerm_cosmosdb_account.cloud-atlas-cosmosdb.name
   database_name       = azurerm_cosmosdb_sql_database.cloud-atlas-cosmosdb-db.name
