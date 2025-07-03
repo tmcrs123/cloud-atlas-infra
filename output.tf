@@ -1,9 +1,4 @@
-# output "instance_id" {
-#   description = "ID of the EC2 instance created"
-#   value       = aws_instance.app_server.id
-# }
-
-# output "instance_public_ip" {
-#   description = "IP of the EC2 instance created"
-#   value       = aws_instance.app_server.public_ip
-# }
+output "lambda-process_image_role_arn" {
+  description = "ARN of process image lambda"
+  value       = aws_iam_role.lambda-process-image-role.arn
+}
