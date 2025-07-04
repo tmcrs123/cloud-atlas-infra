@@ -103,3 +103,21 @@ variable "google_map_key" {
   sensitive   = true
   default     = "some id"
 }
+
+variable "optimized_photos_cloudfront_public_key_pem" {
+  description = "Public key from cloudfront opt dist"
+  type        = string
+  sensitive   = false
+  default     = <<EOF
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7w6EJyLPRHamMwqC8UsA
+/A3lx0A9OaMQmdzPZV9mv8nyEvjpV1pYU0jzD4GlZnu3HwBbFas3l0T1g81EREZ6
+FFlCsaklcF3AmgSz/YZJz88f2/LVTdbnHICJPzCvMN+l5CT+wLk/1kqBIgsgTxkc
+mmysiVbHpQSXxb+PPBcy8aBjZNMGPhfSs2mdgwsp2PpYXbKkqxXHmXJFlb2h6ESH
+cOMVeXX1kKDL13cj5qHSxF4M2CJTFuyXNs6vCMA+2QbJsrLq+SX7NJO0jctRUcQh
++EgnMuJW+ReQu1gJQxLGY3IEqo/e30AQ6Vy3jmah0GhDMXbkVPCYE6RYOTaIvViF
+5QIDAQAB
+-----END PUBLIC KEY-----
+EOF
+}
+

@@ -401,7 +401,14 @@ resource "aws_iam_policy" "lambda-api_delete_policy" {
           "logs:PutLogEvents"
         ]
         Resource = "arn:aws:logs:*:*:*"
-      }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = "${aws_secretsmanager_secret.cloudfront_private_key.arn}"
+      },
     ]
   })
 }
@@ -546,6 +553,7 @@ resource "aws_cloudfront_distribution" "opt_distribution" {
     allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD", "OPTIONS"]
     target_origin_id         = "cloud-atlas-${local.environment}-opt"
+    trusted_key_groups = [aws_cloudfront_key_group.optimized_photos_key_group.id]
     viewer_protocol_policy   = "redirect-to-https"
     cache_policy_id          = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized
     origin_request_policy_id = "88a5eaf4-2fd4-4709-b370-b4c650ea3fcf" # CORS-S3Origin
@@ -575,6 +583,29 @@ resource "aws_cloudfront_distribution" "opt_distribution" {
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
+}
+
+resource "aws_cloudfront_key_group" "optimized_photos_key_group" {
+  name = "cloud-atlas-${local.environment}-optimized-photos-cloudfront-keygroup"
+  items = [
+    aws_cloudfront_public_key.optimized_photos_public_key.id
+  ]
+}
+
+resource "aws_cloudfront_public_key" "optimized_photos_public_key" {
+  name        = "cloud-atlas-${local.environment}-optimized-photos-cloudfront-public-key"
+  comment     = "Public key for optimized photos CloudFront distribution"
+  encoded_key = var.optimized_photos_cloudfront_public_key_pem
+}
+
+resource "aws_secretsmanager_secret" "cloudfront_private_key" {
+  name        = "cloud-atlas-${local.environment}-cloudfront-private-key"
+  description = "The private key used by cloudfront to sign urls"
+}
+
+resource "aws_secretsmanager_secret_version" "cloudfront_private_key_version" {
+  secret_id     = aws_secretsmanager_secret.cloudfront_private_key.id
+  secret_string = file("./keys/private_${local.environment}_key.pem")
 }
 
 ## UI Code Build
