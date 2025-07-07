@@ -272,6 +272,31 @@ resource "aws_s3_bucket_policy" "ui_bucket_policy" {
   })
 }
 
+resource "aws_s3_bucket_policy" "opt_bucket_policy" {
+  bucket = aws_s3_bucket.opt_bucket.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Id      = "PolicyForCloudFrontPrivateContent"
+    Statement = [
+      {
+        Sid    = "AllowCloudFrontServicePrincipal"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudfront.amazonaws.com"
+        }
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.opt_bucket.arn}/*"
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = "arn:aws:cloudfront::${var.aws_account_id}:distribution/${aws_cloudfront_distribution.opt_distribution.id}"
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_s3_bucket" "lambdas_bucket" {
   bucket        = "cloud-atlas-${local.environment}-lambdas"
   force_destroy = true
@@ -304,7 +329,7 @@ resource "aws_s3_bucket_cors_configuration" "dump_bucket_cors" {
 
   cors_rule {
     allowed_headers = ["*"]
-    allowed_methods = ["POST"]
+    allowed_methods = ["PUT"]
     allowed_origins = ["*"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
@@ -553,7 +578,7 @@ resource "aws_cloudfront_distribution" "opt_distribution" {
     allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD", "OPTIONS"]
     target_origin_id         = "cloud-atlas-${local.environment}-opt"
-    trusted_key_groups = [aws_cloudfront_key_group.optimized_photos_key_group.id]
+    trusted_key_groups       = [aws_cloudfront_key_group.optimized_photos_key_group.id]
     viewer_protocol_policy   = "redirect-to-https"
     cache_policy_id          = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized
     origin_request_policy_id = "88a5eaf4-2fd4-4709-b370-b4c650ea3fcf" # CORS-S3Origin
