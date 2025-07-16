@@ -1,9 +1,3 @@
-# variable "environment" {
-#   description = "Name of the environment"
-#   type        = string
-#   default     = "demo"
-# }
-
 locals {
   environment = terraform.workspace
 }
