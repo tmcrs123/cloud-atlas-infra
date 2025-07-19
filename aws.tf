@@ -342,9 +342,22 @@ resource "aws_s3_bucket_cors_configuration" "opt_bucket_cors" {
   }
 }
 
-# data "local_file" "process_image_lambda_source" {
-#   filename = "${path.module}/../cloud-atlas-lambda/process-image/process-image.zip"
-# }
+resource "aws_dynamodb_table" "photos-table" {
+  name         = "cloud-atlas-${local.environment}-photos"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "atlasId"
+  range_key    = "markerId"
+
+  attribute {
+    name = "atlasId"
+    type = "S"
+  }
+
+  attribute {
+    name = "markerId"
+    type = "S"
+  }
+}
 
 data "archive_file" "process_image_lambda_source" {
   type        = "zip"
@@ -353,15 +366,15 @@ data "archive_file" "process_image_lambda_source" {
 }
 
 resource "aws_lambda_layer_version" "sharp-layer" {
-  layer_name          = "cloud-atlas-${local.environment}-sharp-layer"
-  filename            = "${path.module}/../lambda-test/release-arm64.zip"
-  compatible_runtimes = ["nodejs20.x", "nodejs22.x"]
-  description         = "Dependencies for process-image lambda"
+  layer_name               = "cloud-atlas-${local.environment}-sharp-layer"
+  filename                 = "${path.module}/../lambda-test/release-arm64.zip"
+  compatible_runtimes      = ["nodejs20.x", "nodejs22.x"]
+  description              = "Dependencies for process-image lambda"
   compatible_architectures = ["arm64"]
 }
 
 resource "aws_lambda_function" "process-image-lambda" {
-  layers = [aws_lambda_layer_version.sharp-layer.arn]
+  layers           = [aws_lambda_layer_version.sharp-layer.arn]
   function_name    = "cloud-atlas-${local.environment}-process-image"
   handler          = "index.handler"
   runtime          = "nodejs22.x"
@@ -369,7 +382,8 @@ resource "aws_lambda_function" "process-image-lambda" {
   source_code_hash = data.archive_file.process_image_lambda_source.output_base64sha256
   role             = aws_iam_role.lambda-process-image-role.arn
   timeout          = 30
-  architectures = ["arm64"]
+  memory_size      = 1024
+  architectures    = ["arm64"]
 
   environment {
     variables = {
@@ -408,11 +422,33 @@ resource "aws_iam_role" "lambda-process-image-role" {
 }
 
 resource "aws_iam_policy" "lambda-api-policy" {
-  name        = "cloud-atlas-${local.environment}-lambda-api-s3-delete-policy"
-  description = "Allow Cloud Atlas lambda API to delete objects from optimized S3 bucket"
+  name        = "cloud-atlas-${local.environment}-lambda-api-policy"
+  description = "Cloud Atlas lambda API permissions"
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:Query",
+          "dynamodb:Delete",
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+        ]
+        Resource = [
+          aws_dynamodb_table.photos-table.arn
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+        ]
+        Resource = [
+          "${aws_s3_bucket.opt_bucket.arn}",
+        ]
+      },
       {
         Effect = "Allow"
         Action = [
@@ -492,6 +528,25 @@ resource "aws_iam_policy" "lambda-process-image-policy" {
         ]
         Resource = [
           "${aws_s3_bucket.opt_bucket.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = [
+          aws_dynamodb_table.photos-table.arn
         ]
       },
       {
