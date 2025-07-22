@@ -838,10 +838,13 @@ resource "aws_codebuild_project" "ui_build" {
   service_role = aws_iam_role.codebuild_service_role.arn
 
   source {
-    type      = "CODECOMMIT"
-    location  = "https://git-codecommit.us-east-1.amazonaws.com/v1/repos/cloud-atlas-ui"
+    type      = "GITHUB"
+    location  = var.ui_git_repo
+    git_clone_depth = 1
     buildspec = "buildspec-ui.yaml"
   }
+
+   source_version = local.ui_git_repo_branch
 
   artifacts {
     type = "NO_ARTIFACTS"
@@ -866,7 +869,7 @@ resource "aws_codebuild_project" "ui_build" {
 
     environment_variable {
       name  = "api_endpoint"
-      value = aws_ssm_parameter.api_endpoint.value
+      value = "${aws_ssm_parameter.api_endpoint.value}/api"
       type  = "PLAINTEXT"
     }
 
@@ -1024,13 +1027,13 @@ resource "aws_ssm_parameter" "auth_well_known_endpoint_url" {
 resource "aws_ssm_parameter" "redirect_url" {
   name  = "cloud-atlas_${local.environment}_redirect_url"
   type  = "String"
-  value = var.callback_url
+  value = local.callback_url
 }
 
 resource "aws_ssm_parameter" "post_logout_redirect_uri" {
   name  = "cloud-atlas_${local.environment}_post_logout_redirect_uri"
   type  = "String"
-  value = var.logout_url
+  value = local.logout_url
 }
 
 resource "aws_ssm_parameter" "clientid" {
@@ -1084,7 +1087,7 @@ resource "aws_ssm_parameter" "id_token_expiration_in_miliseconds" {
 resource "aws_ssm_parameter" "logout_uri" {
   name  = "cloud-atlas_${local.environment}_logout_uri"
   type  = "String"
-  value = var.logout_url
+  value = local.logout_url
 }
 
 resource "aws_ssm_parameter" "atlas_limit" {

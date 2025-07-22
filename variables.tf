@@ -21,10 +21,18 @@ variable "callback_url" {
   default     = "http://localhost:4200/redirect"
 }
 
+locals {
+  callback_url = terraform.workspace == "demo" ? "https://demo.cloud-atlas.net/redirect" : var.callback_url
+}
+
 variable "logout_url" {
   description = "UI logout url"
   type        = string
   default     = "http://localhost:4200"
+}
+
+locals {
+  logout_url = terraform.workspace == "demo" ? "https://demo.cloud-atlas.net" : var.logout_url
 }
 
 variable "token_renew_time" {
@@ -63,13 +71,6 @@ variable "images_limit" {
   default     = 10
 }
 
-# variable "sql_admin_password" {
-#   description = "Password for the SQL admin user"
-#   type        = string
-#   sensitive   = true
-#   default     = "some-password"
-# }
-
 variable "azure_subscription_id" {
   description = "Azure subscription Id"
   type        = string
@@ -96,6 +97,23 @@ variable "google_map_key" {
   type        = string
   sensitive   = true
   default     = "some id"
+}
+
+variable "ui_git_repo" {
+  description = "The git repo UI url"
+  type        = string
+  sensitive   = false
+  default     = "https://github.com/tmcrs123/cloud-atlas-ui"
+}
+
+variable "ui_git_repo_branch" {
+  description = "The branch to use for the UI build"
+  type        = string
+  default     = "demo"
+}
+
+locals {
+  ui_git_repo_branch = terraform.workspace == "demo" ? var.ui_git_repo_branch : "master"
 }
 
 variable "optimized_photos_cloudfront_public_key_pem" {
