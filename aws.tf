@@ -218,10 +218,12 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
   allowed_oauth_scopes                 = ["openid"]
 
   callback_urls = [
-    var.callback_url
+    var.callback_url,
+    "https://demo.cloud-atlas.net/redirect"
   ]
   logout_urls = [
-    var.logout_url
+    var.logout_url,
+    "https://demo.cloud-atlas.net"
   ]
 }
 
@@ -253,7 +255,7 @@ resource "aws_s3_bucket_policy" "ui_bucket_policy" {
         Resource = "${aws_s3_bucket.ui_bucket.arn}/*"
         Condition = {
           StringEquals = {
-            "AWS:SourceArn" = "arn:aws:cloudfront::${var.aws_account_id}:distribution/*"
+            "AWS:SourceArn" = "${aws_cloudfront_distribution.ui_distribution.arn}"
           }
         }
       }
@@ -367,7 +369,7 @@ data "archive_file" "process_image_lambda_source" {
 
 resource "aws_lambda_layer_version" "sharp-layer" {
   layer_name               = "cloud-atlas-${local.environment}-sharp-layer"
-  filename                 = "${path.module}/../lambda-test/release-arm64.zip"
+  filename                 = "${path.module}/../cloud-atlas-lambda/process-image/sharp_layer.zip"
   compatible_runtimes      = ["nodejs20.x", "nodejs22.x"]
   description              = "Dependencies for process-image lambda"
   compatible_architectures = ["arm64"]
@@ -482,7 +484,7 @@ resource "aws_iam_policy" "lambda-api-policy" {
           "secretsmanager:GetSecretValue"
         ]
         Resource = "${aws_secretsmanager_secret.cloudfront_private_key.arn}"
-      },
+      }
     ]
   })
 }
@@ -596,8 +598,8 @@ resource "aws_cloudfront_origin_access_control" "ui_oac" {
 }
 
 resource "aws_cloudfront_distribution" "ui_distribution" {
-  enabled = true
-  # aliases             = ["demo.cloud-atlas.net", "www.demo.cloud-atlas.net"]
+  enabled             = true
+  aliases             = ["demo.cloud-atlas.net", "www.demo.cloud-atlas.net"]
   default_root_object = "index.html"
 
   origin {
@@ -712,8 +714,14 @@ resource "aws_cloudfront_public_key" "optimized_photos_public_key" {
   }
 }
 
+resource "random_string" "cloudfront_secret_suffix" {
+  length  = 6
+  upper   = false
+  special = false
+}
+
 resource "aws_secretsmanager_secret" "cloudfront_private_key" {
-  name        = "cloud-atlas-${local.environment}-cloudfront-private-key-100720250836"
+  name        = "cloud-atlas-${local.environment}-cloudfront-private-key-${random_string.cloudfront_secret_suffix.result}"
   description = "The private key used by cloudfront to sign urls"
 }
 
@@ -755,26 +763,7 @@ resource "aws_iam_policy" "codebuild_ssm_policy" {
         Action = [
           "ssm:GetParameters"
         ]
-        Resource = [
-          aws_ssm_parameter.app_name.arn,
-          aws_ssm_parameter.api_endpoint.arn,
-          aws_ssm_parameter.authority.arn,
-          aws_ssm_parameter.auth_well_known_endpoint_url.arn,
-          aws_ssm_parameter.redirect_url.arn,
-          aws_ssm_parameter.post_logout_redirect_uri.arn,
-          aws_ssm_parameter.clientid.arn,
-          aws_ssm_parameter.renew_time_before_token_expires.arn,
-          aws_ssm_parameter.region.arn,
-          aws_ssm_parameter.user_pool_id.arn,
-          aws_ssm_parameter.max_image_file_size_in_bytes.arn,
-          aws_ssm_parameter.google_map_id.arn,
-          aws_ssm_parameter.google_maps_api_key.arn,
-          aws_ssm_parameter.id_token_expiration_in_miliseconds.arn,
-          aws_ssm_parameter.logout_uri.arn,
-          aws_ssm_parameter.atlas_limit.arn,
-          aws_ssm_parameter.markers_limit.arn,
-          aws_ssm_parameter.photos_limit.arn
-        ]
+        Resource = "*"
       }
     ]
   })
@@ -864,117 +853,117 @@ resource "aws_codebuild_project" "ui_build" {
     type         = "LINUX_CONTAINER"
 
     environment_variable {
-      name  = "environmentName"
+      name  = "environment"
       value = local.environment
       type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "appName"
+      name  = "app_name"
       value = aws_ssm_parameter.app_name.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
       name  = "api_endpoint"
       value = aws_ssm_parameter.api_endpoint.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
       name  = "authority"
       value = aws_ssm_parameter.authority.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "authWellknownEndpointUrl"
+      name  = "auth_well_known_endpoint_url"
       value = aws_ssm_parameter.auth_well_known_endpoint_url.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "redirectUrl"
+      name  = "redirect_url"
       value = aws_ssm_parameter.redirect_url.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "postLogoutRedirectUri"
+      name  = "post_logout_redirect_uri"
       value = aws_ssm_parameter.post_logout_redirect_uri.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "clientId"
+      name  = "client_id"
       value = aws_ssm_parameter.clientid.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "renewTimeBeforeTokenExpiresInSeconds"
+      name  = "renew_time_before_token_expires"
       value = aws_ssm_parameter.renew_time_before_token_expires.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
       name  = "region"
       value = aws_ssm_parameter.region.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "userPoolId"
+      name  = "user_pool_id"
       value = aws_ssm_parameter.user_pool_id.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "maxImageFileSizeInBytes"
+      name  = "max_image_file_size_in_bytes"
       value = aws_ssm_parameter.max_image_file_size_in_bytes.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "googleMapId"
+      name  = "google_map_id"
       value = aws_ssm_parameter.google_map_id.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "googleMapsApiKey"
+      name  = "google_maps_api_key"
       value = aws_ssm_parameter.google_maps_api_key.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "idTokenExpirationInMiliseconds"
+      name  = "id_token_expiration_in_miliseconds"
       value = aws_ssm_parameter.id_token_expiration_in_miliseconds.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "logoutUri"
+      name  = "logout_uri"
       value = aws_ssm_parameter.logout_uri.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "mapsLimit"
+      name  = "maps_limit"
       value = aws_ssm_parameter.atlas_limit.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "markersLimit"
+      name  = "markers_limit"
       value = aws_ssm_parameter.markers_limit.value
-      type  = "PARAMETER_STORE"
+      type  = "PLAINTEXT"
     }
 
     environment_variable {
-      name  = "imagesLimit"
-      value = aws_ssm_parameter.photos_limit.value
-      type  = "PARAMETER_STORE"
+      name  = "images_limit"
+      value = aws_ssm_parameter.images_limit.value
+      type  = "PLAINTEXT"
     }
   }
 }
@@ -1003,109 +992,115 @@ resource "aws_iam_role" "codebuild_service_role" {
 # SSM Parameters
 
 resource "aws_ssm_parameter" "app_name" {
-  name  = "/cloud-atlas/${local.environment}/app-name-parameter"
+  name  = "cloud-atlas_${local.environment}_app_name"
+  type  = "String"
+  value = local.environment
+}
+
+resource "aws_ssm_parameter" "environment" {
+  name  = "cloud-atlas_${local.environment}_environment"
   type  = "String"
   value = local.environment
 }
 
 resource "aws_ssm_parameter" "api_endpoint" {
-  name  = "/cloud-atlas/${local.environment}/api_endpoint"
+  name  = "cloud-atlas_${local.environment}_api_endpoint"
   type  = "String"
   value = aws_api_gateway_stage.api_gw_stage.invoke_url
 }
 
 resource "aws_ssm_parameter" "authority" {
-  name  = "/cloud-atlas/${local.environment}/authority"
+  name  = "cloud-atlas_${local.environment}_authority"
   type  = "String"
-  value = "https://cloud-atlas-${local.environment}.auth.${var.aws_region}.amazoncognito.com"
+  value = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.user_pool.id}"
 }
 
 resource "aws_ssm_parameter" "auth_well_known_endpoint_url" {
-  name  = "/cloud-atlas/${local.environment}/auth_well_known_endpoint_url"
+  name  = "cloud-atlas_${local.environment}_auth_well_known_endpoint_url"
   type  = "String"
-  value = "https://cloud-atlas-${local.environment}.auth.${var.aws_region}.amazoncognito.com/.well-known/openid-configuration"
+  value = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.user_pool.id}"
 }
 
 resource "aws_ssm_parameter" "redirect_url" {
-  name  = "/cloud-atlas/${local.environment}/redirect_url"
+  name  = "cloud-atlas_${local.environment}_redirect_url"
   type  = "String"
   value = var.callback_url
 }
 
 resource "aws_ssm_parameter" "post_logout_redirect_uri" {
-  name  = "/cloud-atlas/${local.environment}/post_logout_redirect_uri"
+  name  = "cloud-atlas_${local.environment}_post_logout_redirect_uri"
   type  = "String"
-  value = var.callback_url
+  value = var.logout_url
 }
 
 resource "aws_ssm_parameter" "clientid" {
-  name  = "/cloud-atlas/${local.environment}/clientid"
+  name  = "cloud-atlas_${local.environment}_client_id"
   type  = "String"
   value = aws_cognito_user_pool_client.user_pool_client.id
 }
 
 resource "aws_ssm_parameter" "renew_time_before_token_expires" {
-  name  = "/cloud-atlas/${local.environment}/renew_time_before_token_expires"
+  name  = "cloud-atlas_${local.environment}_renew_time_before_token_expires"
   type  = "String"
   value = var.token_renew_time
 }
 
 resource "aws_ssm_parameter" "region" {
-  name  = "/cloud-atlas/${local.environment}/region"
+  name  = "cloud-atlas_${local.environment}_region"
   type  = "String"
   value = var.aws_region
 }
 
 resource "aws_ssm_parameter" "user_pool_id" {
-  name  = "/cloud-atlas/${local.environment}/user_pool_id"
+  name  = "cloud-atlas_${local.environment}_user_pool_id"
   type  = "String"
   value = aws_cognito_user_pool.user_pool.id
 }
 
 resource "aws_ssm_parameter" "max_image_file_size_in_bytes" {
-  name  = "/cloud-atlas/${local.environment}/max_image_file_size_in_bytes"
+  name  = "cloud-atlas_${local.environment}_max_image_file_size_in_bytes"
   type  = "String"
-  value = var.max_file_bytes
+  value = var.max_file_size_bytes
 }
 
 resource "aws_ssm_parameter" "google_map_id" {
-  name  = "/cloud-atlas/${local.environment}/google_map_id"
+  name  = "cloud-atlas_${local.environment}_google_map_id"
   type  = "String"
   value = var.google_map_id
 }
 
 resource "aws_ssm_parameter" "google_maps_api_key" {
-  name  = "/cloud-atlas/${local.environment}/google_maps_api_key"
+  name  = "cloud-atlas_${local.environment}_google_maps_api_key"
   type  = "String"
   value = var.google_map_key
 }
 
 resource "aws_ssm_parameter" "id_token_expiration_in_miliseconds" {
-  name  = "/cloud-atlas/${local.environment}/id_token_expiration_in_miliseconds"
+  name  = "cloud-atlas_${local.environment}_id_token_expiration_in_miliseconds"
   type  = "String"
   value = var.token_expiration_time
 }
 
 resource "aws_ssm_parameter" "logout_uri" {
-  name  = "/cloud-atlas/${local.environment}/logout_uri"
+  name  = "cloud-atlas_${local.environment}_logout_uri"
   type  = "String"
   value = var.logout_url
 }
 
 resource "aws_ssm_parameter" "atlas_limit" {
-  name  = "/cloud-atlas/${local.environment}/atlas_limit"
+  name  = "cloud-atlas_${local.environment}_atlas_limit"
   type  = "String"
   value = var.atlas_limit
 }
 
 resource "aws_ssm_parameter" "markers_limit" {
-  name  = "/cloud-atlas/${local.environment}/markers_limit"
+  name  = "cloud-atlas_${local.environment}_markers_limit"
   type  = "String"
   value = var.markers_limit
 }
 
-resource "aws_ssm_parameter" "photos_limit" {
-  name  = "/cloud-atlas/${local.environment}/photos_limit"
+resource "aws_ssm_parameter" "images_limit" {
+  name  = "cloud-atlas_${local.environment}_images_limit"
   type  = "String"
-  value = var.photos_limit
+  value = var.images_limit
 }
