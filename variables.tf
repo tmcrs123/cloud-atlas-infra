@@ -22,7 +22,7 @@ variable "callback_url" {
 }
 
 locals {
-  callback_url = terraform.workspace == "demo" ? "https://demo.cloud-atlas.net/redirect" : var.callback_url
+  callback_url = terraform.workspace == "demo" ? "https://demo.cloud-atlas.net/redirect" : terraform.workspace == "prod" ? "https://cloud-atlas.net/redirect" : var.callback_url
 }
 
 variable "logout_url" {
@@ -32,7 +32,23 @@ variable "logout_url" {
 }
 
 locals {
-  logout_url = terraform.workspace == "demo" ? "https://demo.cloud-atlas.net" : var.logout_url
+  logout_url = terraform.workspace == "demo" ? "https://demo.cloud-atlas.net" : terraform.workspace == "prod" ? "https://cloud-atlas.net" : var.logout_url
+}
+
+variable "demo_aliases" {
+  description = "Aliases for the demo environment"
+  type        = list(string)
+  default     = ["demo.cloud-atlas.net", "www.demo.cloud-atlas.net"]
+}
+
+variable "prod_aliases" {
+  description = "Aliases for the demo environment"
+  type        = list(string)
+  default     = ["cloud-atlas.net", "www.cloud-atlas.net"]
+}
+
+locals {
+  aliases = terraform.workspace == "demo" ? var.demo_aliases : var.prod_aliases 
 }
 
 variable "token_renew_time" {

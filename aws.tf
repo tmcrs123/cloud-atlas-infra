@@ -207,9 +207,9 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
   generate_secret               = false
   enable_token_revocation       = true
   prevent_user_existence_errors = "ENABLED"
-  
+
   access_token_validity  = 60  # 1 hour
-  id_token_validity      = 120  # 1 hour
+  id_token_validity      = 120 # 1 hour
   refresh_token_validity = 30  # 30 days
 
   token_validity_units {
@@ -228,12 +228,11 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
   allowed_oauth_scopes                 = ["openid"]
 
   callback_urls = [
-    var.callback_url,
-    "https://demo.cloud-atlas.net/redirect"
+    local.callback_url,
   ]
+  
   logout_urls = [
-    var.logout_url,
-    "https://demo.cloud-atlas.net"
+    local.logout_url
   ]
 }
 
@@ -609,7 +608,7 @@ resource "aws_cloudfront_origin_access_control" "ui_oac" {
 
 resource "aws_cloudfront_distribution" "ui_distribution" {
   enabled             = true
-  aliases             = ["demo.cloud-atlas.net", "www.demo.cloud-atlas.net"]
+  aliases             = local.aliases
   default_root_object = "index.html"
 
   origin {
@@ -848,13 +847,13 @@ resource "aws_codebuild_project" "ui_build" {
   service_role = aws_iam_role.codebuild_service_role.arn
 
   source {
-    type      = "GITHUB"
-    location  = var.ui_git_repo
+    type            = "GITHUB"
+    location        = var.ui_git_repo
     git_clone_depth = 1
-    buildspec = "buildspec-ui.yaml"
+    buildspec       = "buildspec-ui.yaml"
   }
 
-   source_version = local.ui_git_repo_branch
+  source_version = local.ui_git_repo_branch
 
   artifacts {
     type = "NO_ARTIFACTS"
