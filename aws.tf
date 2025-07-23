@@ -207,6 +207,16 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
   generate_secret               = false
   enable_token_revocation       = true
   prevent_user_existence_errors = "ENABLED"
+  
+  access_token_validity  = 60  # 1 hour
+  id_token_validity      = 120  # 1 hour
+  refresh_token_validity = 30  # 30 days
+
+  token_validity_units {
+    access_token  = "minutes"
+    id_token      = "minutes"
+    refresh_token = "days"
+  }
 
   explicit_auth_flows = [
     "ALLOW_REFRESH_TOKEN_AUTH",
@@ -997,7 +1007,7 @@ resource "aws_iam_role" "codebuild_service_role" {
 resource "aws_ssm_parameter" "app_name" {
   name  = "cloud-atlas_${local.environment}_app_name"
   type  = "String"
-  value = local.environment
+  value = "cloud-atlas-${local.environment}"
 }
 
 resource "aws_ssm_parameter" "environment" {
