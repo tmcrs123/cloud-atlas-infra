@@ -8,13 +8,6 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-# variable "sql_admin_user" {
-#   description = "SQL admin user"
-#   type        = string
-#   sensitive   = true
-#   default     = "some-user"
-# }
-
 variable "callback_url" {
   description = "UI callback url"
   type        = string
@@ -48,7 +41,7 @@ variable "prod_aliases" {
 }
 
 locals {
-  aliases = terraform.workspace == "demo" ? var.demo_aliases : var.prod_aliases 
+  aliases = terraform.workspace == "demo" ? var.demo_aliases : var.prod_aliases
 }
 
 variable "token_renew_time" {
@@ -132,8 +125,8 @@ locals {
   ui_git_repo_branch = terraform.workspace == "demo" ? var.ui_git_repo_branch : "master"
 }
 
-variable "optimized_photos_cloudfront_public_key_pem" {
-  description = "Public key from cloudfront opt dist"
+variable "optimized_photos_cloudfront_public_key_pem_demo" {
+  description = "Public key from cloudfront opt dist DEMO"
   type        = string
   sensitive   = false
   default     = <<EOF
@@ -148,4 +141,43 @@ qwIDAQAB
 -----END PUBLIC KEY-----
 EOF
 }
+
+variable "optimized_photos_cloudfront_public_key_pem_prod" {
+  description = "Public key from cloudfront opt dist PROD"
+  type        = string
+  sensitive   = false
+  default     = <<EOF
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmeKYP2kWzVRoNnPL4/HD
+/48V002ataQIK2AOvGoruZ56dY7KoE3lzAXOznDHtmUrChIGONd+7biCzTB9sqwI
+15BNYYbAH1/6sSMLHcrGd064zCeFZoVsq8zWwCscRJdGw/i4ChLoSwv7hbDREiVL
+t8c/CMYM6+EcEpNDpIfwW7lofDUvGwQBlHoenZqGX32FzrvefpXCMyJ7vhbmVs7M
+k2DOXUTgt7C8sPmpenlz2DEGylyv3EsUO8V991sLvV+tKq48CuiznnAHlmoT7xhM
+DcpdzZcN4FMNEO8P/aol7Ao/FSckVJe1ftT3udr6PuPGlM4sfSuXlU75EF3qvTqn
+SQIDAQAB
+-----END PUBLIC KEY-----
+EOF
+}
+
+
+locals {
+  optimized_photos_cloudfront_public_key_pem = terraform.workspace == "demo" ? var.optimized_photos_cloudfront_public_key_pem_demo : var.optimized_photos_cloudfront_public_key_pem_prod
+}
+
+variable "cloudfront_viewer_certificate_demo" {
+  description = "The SSL certificate for this distribution"
+  type        = string
+  default     = "e0f5ed31-2ed9-41a3-8701-7be09cb4fa18"
+}
+
+variable "cloudfront_viewer_certificate_prod" {
+  description = "The SSL certificate for this distribution"
+  type        = string
+  default     = "9f57d34a-ddd0-4fab-9219-0d0cc7373892"
+}
+
+locals {
+  cloudfront_viewer_certificate = terraform.workspace == "demo" ? var.cloudfront_viewer_certificate_demo : var.cloudfront_viewer_certificate_prod
+}
+
 

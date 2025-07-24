@@ -230,7 +230,7 @@ resource "aws_cognito_user_pool_client" "user_pool_client" {
   callback_urls = [
     local.callback_url,
   ]
-  
+
   logout_urls = [
     local.logout_url
   ]
@@ -641,7 +641,7 @@ resource "aws_cloudfront_distribution" "ui_distribution" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = "arn:aws:acm:${var.aws_region}:${var.aws_account_id}:certificate/e0f5ed31-2ed9-41a3-8701-7be09cb4fa18"
+    acm_certificate_arn      = "arn:aws:acm:${var.aws_region}:${var.aws_account_id}:certificate/${local.cloudfront_viewer_certificate}"
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
@@ -716,7 +716,7 @@ resource "aws_cloudfront_key_group" "optimized_photos_key_group" {
 resource "aws_cloudfront_public_key" "optimized_photos_public_key" {
   name        = "cloud-atlas-${local.environment}-optimized-photos-cloudfront-public-key"
   comment     = "Public key for optimized photos CloudFront distribution"
-  encoded_key = var.optimized_photos_cloudfront_public_key_pem
+  encoded_key = local.optimized_photos_cloudfront_public_key_pem
 
   lifecycle {
     ignore_changes = [encoded_key]
@@ -843,7 +843,7 @@ resource "aws_iam_role_policy_attachment" "codebuild_codecommit_attach" {
 }
 
 resource "aws_codebuild_project" "ui_build" {
-  name         = "cloud-atlas-ui-build"
+  name         = "cloud-atlas-${local.environment}-ui-build"
   service_role = aws_iam_role.codebuild_service_role.arn
 
   source {
@@ -993,7 +993,7 @@ resource "aws_iam_role" "codebuild_service_role" {
         Action = "sts:AssumeRole"
         Condition = {
           StringEquals = {
-            "aws:SourceArn" = "arn:aws:codebuild:${var.aws_region}:${var.aws_account_id}:project/cloud-atlas-ui-build"
+            "aws:SourceArn" = "arn:aws:codebuild:${var.aws_region}:${var.aws_account_id}:project/cloud-atlas-${local.environment}-ui-build"
           }
         }
       }

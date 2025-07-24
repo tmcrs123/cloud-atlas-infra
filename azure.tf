@@ -4,7 +4,9 @@ resource "azurerm_resource_group" "cloud-atlas-resource-group" {
   location = "UK South"
 }
 
-# sql db
+# sql db - This creates a PAID table. Currently there's no away to get the free table via terraform
+
+
 # resource "azurerm_mssql_server" "cloud-atlas-sql-server" {
 #   name                         = "cloud-atlas-${local.environment}-sql-server"
 #   resource_group_name          = azurerm_resource_group.cloud-atlas-resource-group.name
